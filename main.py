@@ -287,23 +287,61 @@ async def generate_schedule(background_tasks: BackgroundTasks, services=Depends(
         if not openai_service:
             raise HTTPException(status_code=503, detail="OpenAI service not configured")
         
-        # Get pending tasks
+        # Get pending tasks and filter to prevent message size issues
         pending_tasks = task_service.get_pending_tasks()
         
         if not pending_tasks:
             return {"message": "No pending tasks to schedule"}
+        
+        # Filter and limit tasks to prevent AI message size errors
+        # Sort by priority (descending) and due_date (ascending), then limit to top 10
+        filtered_tasks = []
+        for task in pending_tasks:
+            # Convert task to dict if it's an object
+            if hasattr(task, '__dict__'):
+                task_dict = {
+                    'id': getattr(task, 'id', None),
+                    'title': getattr(task, 'title', ''),
+                    'description': getattr(task, 'description', ''),
+                    'priority': getattr(task, 'priority', 0),
+                    'status': getattr(task, 'status', 'pending'),
+                    'due_date': getattr(task, 'due_date', None),
+                    'estimated_duration': getattr(task, 'estimated_duration', 60)
+                }
+            else:
+                task_dict = task
+            
+            # Only include tasks that are pending or in progress
+            if task_dict.get('status') in ['pending', 'in_progress']:
+                filtered_tasks.append(task_dict)
+        
+        # Sort by priority (descending) and due_date (ascending)
+        filtered_tasks.sort(
+            key=lambda t: (
+                -t.get('priority', 0),  # Higher priority first
+                t.get('due_date', '9999-12-31') if t.get('due_date') else '9999-12-31'  # Earlier due date first
+            )
+        )
+        
+        # Limit to top 10 tasks to prevent message size issues
+        filtered_tasks = filtered_tasks[:10]
+        
+        if not filtered_tasks:
+            return {"message": "No suitable tasks to schedule"}
         
         # Get calendar availability if Google service is available
         calendar_events = []
         if google_service:
             try:
                 calendar_events = google_service.get_calendar_events()
+                # Limit calendar events to prevent message size issues
+                calendar_events = calendar_events[:20] if calendar_events else []
             except Exception as e:
                 print(f"Warning: Could not fetch calendar events: {str(e)}")
         
-        # Generate schedule with AI
+        # Generate schedule with AI using filtered data
         schedule = openai_service.generate_schedule(
-            tasks=pending_tasks,
+            tasks=filtered_tasks,
             calendar_events=calendar_events,
             current_time=datetime.now()
         )

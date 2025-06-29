@@ -13,6 +13,7 @@ from services.openai_service import OpenAIService
 from services.task_service import TaskService
 from services.scheduler_service import SchedulerService
 from services.gmail_oauth_service import GmailOAuthService
+from services.gmail_smtp_service import GmailSMTPService
 from database.models import Task, Schedule
 from database.database import engine, get_db
 from models import (
@@ -64,7 +65,7 @@ def get_services():
     return google_service, openai_service, task_service, scheduler_service
 
 def get_gmail_service():
-    """Dependency to get Gmail OAuth service"""
+    """Dependency to get Gmail service (SMTP or OAuth2)"""
     if not gmail_service:
         raise HTTPException(status_code=503, detail="Gmail service not initialized")
     return gmail_service
@@ -94,13 +95,20 @@ async def startup_event():
     task_service = TaskService()
     scheduler_service = SchedulerService(google_service)
     
-    # Initialize Gmail OAuth service (optional - won't crash if not configured)
+    # Initialize Gmail service - try SMTP first, then OAuth2
     try:
-        gmail_service = GmailOAuthService()
-        print("✅ Gmail OAuth2 service initialized")
+        # Try SMTP first (better for containers)
+        gmail_service = GmailSMTPService()
+        print("✅ Gmail SMTP service initialized")
     except Exception as e:
-        print(f"⚠️  Gmail OAuth2 service not initialized: {str(e)}")
-        gmail_service = None
+        print(f"⚠️  Gmail SMTP service not initialized: {str(e)}")
+        try:
+            # Fall back to OAuth2
+            gmail_service = GmailOAuthService()
+            print("✅ Gmail OAuth2 service initialized")
+        except Exception as e2:
+            print(f"⚠️  Gmail OAuth2 service not initialized: {str(e2)}")
+            gmail_service = None
     
     # Create database tables
     Task.metadata.create_all(bind=engine)
@@ -510,7 +518,7 @@ async def get_calendar_events(days_ahead: int = 7, services=Depends(get_services
 
 @app.post("/email/send")
 async def send_email(email_request: EmailRequest, gmail_service=Depends(get_gmail_service)):
-    """Send an email using Gmail OAuth2"""
+    """Send an email using Gmail service"""
     try:
         result = gmail_service.send_email(
             subject=email_request.subject,
@@ -523,7 +531,7 @@ async def send_email(email_request: EmailRequest, gmail_service=Depends(get_gmai
 
 @app.post("/reminders/send")
 async def send_reminder(reminder_request: ReminderRequest, services=Depends(get_services), gmail_service=Depends(get_gmail_service)):
-    """Send a reminder email for a task using Gmail OAuth2"""
+    """Send a reminder email for a task using Gmail service"""
     try:
         _, openai_service, task_service, _ = services
         if not openai_service:
@@ -540,7 +548,7 @@ async def send_reminder(reminder_request: ReminderRequest, services=Depends(get_
         if reminder_request.message:
             email_content = f"{reminder_request.message}\n\n{email_content}"
         
-        # Send email using OAuth2
+        # Send email using Gmail service
         result = gmail_service.send_email(
             subject=f"Reminder: {task.title}",
             body=email_content,
@@ -555,13 +563,13 @@ async def send_reminder(reminder_request: ReminderRequest, services=Depends(get_
 
 @app.get("/email/test")
 async def test_email_connection(gmail_service=Depends(get_gmail_service)):
-    """Test Gmail OAuth2 connection"""
+    """Test Gmail connection"""
     try:
         success = gmail_service.test_connection()
         if success:
-            return {"message": "Gmail OAuth2 connection successful"}
+            return {"message": "Gmail connection successful"}
         else:
-            raise HTTPException(status_code=500, detail="Gmail OAuth2 connection failed")
+            raise HTTPException(status_code=500, detail="Gmail connection failed")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

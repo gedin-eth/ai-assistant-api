@@ -1,0 +1,925 @@
+openapi: 3.0.3
+info:
+  title: AI Personal Assistant API
+  description: |
+    An intelligent personal assistant that manages tasks, schedules, and productivity using AI.
+    
+    ## Features
+    - **Task Management**: Create, update, delete, and track tasks with AI assistance
+    - **Smart Scheduling**: Generate optimal schedules and sync with Google Calendar
+    - **Email Integration**: Send emails and reminders via Gmail OAuth2
+    - **Productivity Analysis**: Get AI-powered insights and recommendations
+    - **Google Sheets Sync**: Synchronize tasks with Google Sheets
+    - **AI Processing**: Use AI to process, create, and improve tasks
+    
+    ## Authentication
+    This API uses environment variables for authentication:
+    - `OPENAI_API_KEY`: For AI features
+    - Google credentials for Calendar and Sheets integration
+    - Gmail OAuth2 for email functionality
+    
+    ## Base URL
+    - Production: `http://82.180.161.161:8000`
+    - Development: `http://localhost:8000`
+  version: 1.0.0
+  contact:
+    name: AI Assistant API Support
+    url: http://82.180.161.161:8000/docs
+
+servers:
+  - url: http://82.180.161.161:8000
+    description: Production server
+  - url: http://localhost:8000
+    description: Development server
+
+paths:
+  /:
+    get:
+      summary: Root endpoint
+      description: Get basic API information
+      responses:
+        '200':
+          description: API information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "AI Personal Assistant API is running"
+                  version:
+                    type: string
+                    example: "1.0.0"
+                  docs:
+                    type: string
+                    example: "/docs"
+
+  /health:
+    get:
+      summary: Health check
+      description: Check if the API is running properly
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: "2024-01-15T10:30:00"
+
+  /tasks:
+    get:
+      summary: Get all tasks
+      description: Retrieve all tasks with optional filtering by status and priority
+      parameters:
+        - name: status
+          in: query
+          description: Filter tasks by status
+          schema:
+            type: string
+            enum: [pending, in_progress, completed, cancelled]
+        - name: priority
+          in: query
+          description: Filter tasks by priority (1-5)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+      responses:
+        '200':
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaskResponse'
+        '500':
+          description: Internal server error
+
+    post:
+      summary: Create a new task
+      description: Create a new task with the provided details
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskInput'
+      responses:
+        '200':
+          description: Task created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '500':
+          description: Internal server error
+
+  /tasks/statistics:
+    get:
+      summary: Get task statistics
+      description: Retrieve comprehensive statistics about tasks
+      responses:
+        '200':
+          description: Task statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskStatistics'
+        '500':
+          description: Internal server error
+
+  /tasks/overdue:
+    get:
+      summary: Get overdue tasks
+      description: Retrieve all tasks that are past their due date
+      responses:
+        '200':
+          description: List of overdue tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaskResponse'
+        '500':
+          description: Internal server error
+
+  /tasks/{task_id}:
+    get:
+      summary: Get a specific task
+      description: Retrieve a specific task by its ID
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          description: The ID of the task
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Task details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '404':
+          description: Task not found
+        '500':
+          description: Internal server error
+
+    put:
+      summary: Update a task
+      description: Update an existing task with new information
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          description: The ID of the task to update
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskUpdate'
+      responses:
+        '200':
+          description: Task updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '404':
+          description: Task not found
+        '500':
+          description: Internal server error
+
+    delete:
+      summary: Delete a task
+      description: Delete a task permanently
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          description: The ID of the task to delete
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Task deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Task deleted successfully"
+        '404':
+          description: Task not found
+        '500':
+          description: Internal server error
+
+  /tasks/ai-process:
+    post:
+      summary: Process task with AI
+      description: Use AI to process and enhance a task description
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                description:
+                  type: string
+                  description: The task description to process
+                  example: "Need to prepare presentation for client meeting"
+              required:
+                - description
+      responses:
+        '200':
+          description: AI processed task
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  processed_description:
+                    type: string
+                    example: "Create a comprehensive presentation for the client meeting including agenda, key points, and action items"
+                  suggestions:
+                    type: array
+                    items:
+                      type: string
+                    example: ["Break down into sections", "Include visual aids", "Prepare backup materials"]
+        '500':
+          description: Internal server error
+
+  /tasks/ai-create:
+    post:
+      summary: Create task with AI
+      description: Use AI to automatically create a task from a description
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                description:
+                  type: string
+                  description: Natural language description of the task
+                  example: "I need to prepare a presentation for next week's client meeting"
+              required:
+                - description
+      responses:
+        '200':
+          description: AI created task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '500':
+          description: Internal server error
+
+  /tasks/{task_id}/improvements:
+    get:
+      summary: Get AI task improvements
+      description: Get AI-powered suggestions to improve a specific task
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          description: The ID of the task
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: AI improvements for the task
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  improvements:
+                    type: array
+                    items:
+                      type: string
+                    example: ["Break into smaller subtasks", "Add specific deadlines", "Include success criteria"]
+                  priority_suggestion:
+                    type: integer
+                    example: 3
+                  estimated_duration:
+                    type: integer
+                    example: 120
+        '404':
+          description: Task not found
+        '500':
+          description: Internal server error
+
+  /schedule:
+    get:
+      summary: Get schedule
+      description: Retrieve the current schedule for upcoming days
+      parameters:
+        - name: days_ahead
+          in: query
+          description: Number of days ahead to retrieve (default 7)
+          schema:
+            type: integer
+            default: 7
+            minimum: 1
+            maximum: 30
+      responses:
+        '200':
+          description: List of scheduled items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ScheduleResponse'
+        '500':
+          description: Internal server error
+
+    post:
+      summary: Create a schedule item
+      description: Create a new schedule item for a task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleCreate'
+      responses:
+        '200':
+          description: Schedule item created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleResponse'
+        '500':
+          description: Internal server error
+
+  /schedule/generate:
+    post:
+      summary: Generate optimal schedule
+      description: Use AI to generate an optimal schedule for all pending tasks
+      responses:
+        '200':
+          description: Schedule generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Schedule generated successfully"
+                  generated_items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ScheduleResponse'
+        '500':
+          description: Internal server error
+
+  /schedule/{schedule_id}:
+    put:
+      summary: Update schedule item
+      description: Update an existing schedule item
+      parameters:
+        - name: schedule_id
+          in: path
+          required: true
+          description: The ID of the schedule item
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleUpdate'
+      responses:
+        '200':
+          description: Schedule item updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleResponse'
+        '404':
+          description: Schedule item not found
+        '500':
+          description: Internal server error
+
+    delete:
+      summary: Delete schedule item
+      description: Delete a schedule item
+      parameters:
+        - name: schedule_id
+          in: path
+          required: true
+          description: The ID of the schedule item
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Schedule item deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Schedule item deleted successfully"
+        '404':
+          description: Schedule item not found
+        '500':
+          description: Internal server error
+
+  /schedule/{schedule_id}/complete:
+    post:
+      summary: Mark schedule as complete
+      description: Mark a schedule item as completed
+      parameters:
+        - name: schedule_id
+          in: path
+          required: true
+          description: The ID of the schedule item
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Schedule item marked as complete
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleResponse'
+        '404':
+          description: Schedule item not found
+        '500':
+          description: Internal server error
+
+  /sync/sheets:
+    post:
+      summary: Sync tasks from Google Sheets
+      description: Synchronize tasks from the configured Google Sheet
+      responses:
+        '200':
+          description: Tasks synchronized successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Tasks synchronized successfully"
+                  synced_count:
+                    type: integer
+                    example: 5
+        '500':
+          description: Internal server error
+
+  /calendar/events:
+    get:
+      summary: Get calendar events
+      description: Retrieve events from Google Calendar
+      parameters:
+        - name: days_ahead
+          in: query
+          description: Number of days ahead to retrieve (default 7)
+          schema:
+            type: integer
+            default: 7
+            minimum: 1
+            maximum: 30
+      responses:
+        '200':
+          description: List of calendar events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    summary:
+                      type: string
+                    start:
+                      type: string
+                      format: date-time
+                    end:
+                      type: string
+                      format: date-time
+                    description:
+                      type: string
+        '500':
+          description: Internal server error
+
+  /email/send:
+    post:
+      summary: Send email
+      description: Send an email using Gmail OAuth2
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailRequest'
+      responses:
+        '200':
+          description: Email sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Email sent successfully"
+                  message_id:
+                    type: string
+        '500':
+          description: Internal server error
+
+  /email/test:
+    get:
+      summary: Test email connection
+      description: Test the Gmail OAuth2 connection
+      responses:
+        '200':
+          description: Email connection test result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "connected"
+                  email:
+                    type: string
+                    example: "user@gmail.com"
+        '500':
+          description: Email connection failed
+
+  /reminders/send:
+    post:
+      summary: Send reminder
+      description: Send a reminder email for a specific task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReminderRequest'
+      responses:
+        '200':
+          description: Reminder sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Reminder sent successfully"
+        '500':
+          description: Internal server error
+
+  /productivity/analyze:
+    get:
+      summary: Analyze productivity
+      description: Get AI-powered productivity analysis and recommendations
+      parameters:
+        - name: time_period
+          in: query
+          description: Time period for analysis
+          schema:
+            type: string
+            enum: [day, week, month]
+            default: week
+      responses:
+        '200':
+          description: Productivity analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductivityAnalysis'
+        '500':
+          description: Internal server error
+
+components:
+  schemas:
+    TaskInput:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Task title
+          example: "Prepare client presentation"
+        description:
+          type: string
+          maxLength: 1000
+          description: Task description
+          example: "Create a comprehensive presentation for the quarterly client meeting"
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 5
+          default: 1
+          description: Task priority (1=lowest, 5=highest)
+          example: 3
+        due_date:
+          type: string
+          format: date-time
+          description: Task due date
+          example: "2024-01-20T17:00:00"
+        estimated_duration:
+          type: integer
+          minimum: 1
+          description: Estimated duration in minutes
+          example: 120
+
+    TaskResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Task ID
+          example: 1
+        title:
+          type: string
+          description: Task title
+          example: "Prepare client presentation"
+        description:
+          type: string
+          description: Task description
+          example: "Create a comprehensive presentation for the quarterly client meeting"
+        priority:
+          type: integer
+          description: Task priority
+          example: 3
+        status:
+          type: string
+          enum: [pending, in_progress, completed, cancelled]
+          description: Task status
+          example: "pending"
+        due_date:
+          type: string
+          format: date-time
+          description: Task due date
+          example: "2024-01-20T17:00:00"
+        estimated_duration:
+          type: integer
+          description: Estimated duration in minutes
+          example: 120
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+          example: "2024-01-15T10:30:00"
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: "2024-01-15T14:45:00"
+
+    TaskUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Task title
+          example: "Updated presentation title"
+        description:
+          type: string
+          maxLength: 1000
+          description: Task description
+          example: "Updated task description"
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: Task priority
+          example: 4
+        status:
+          type: string
+          enum: [pending, in_progress, completed, cancelled]
+          description: Task status
+          example: "in_progress"
+        due_date:
+          type: string
+          format: date-time
+          description: Task due date
+          example: "2024-01-22T17:00:00"
+        estimated_duration:
+          type: integer
+          minimum: 1
+          description: Estimated duration in minutes
+          example: 90
+
+    TaskStatistics:
+      type: object
+      properties:
+        total_tasks:
+          type: integer
+          description: Total number of tasks
+          example: 25
+        pending_tasks:
+          type: integer
+          description: Number of pending tasks
+          example: 8
+        completed_tasks:
+          type: integer
+          description: Number of completed tasks
+          example: 15
+        overdue_tasks:
+          type: integer
+          description: Number of overdue tasks
+          example: 2
+        completion_rate:
+          type: number
+          format: float
+          description: Task completion rate as percentage
+          example: 60.0
+        priority_distribution:
+          type: object
+          description: Distribution of tasks by priority
+          example:
+            "1": 5
+            "2": 8
+            "3": 7
+            "4": 3
+            "5": 2
+
+    ScheduleResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Schedule ID
+          example: 1
+        task_id:
+          type: integer
+          description: Associated task ID
+          example: 1
+        scheduled_start:
+          type: string
+          format: date-time
+          description: Scheduled start time
+          example: "2024-01-16T09:00:00"
+        scheduled_end:
+          type: string
+          format: date-time
+          description: Scheduled end time
+          example: "2024-01-16T11:00:00"
+        calendar_event_id:
+          type: string
+          description: Google Calendar event ID
+          example: "abc123def456"
+        is_completed:
+          type: boolean
+          description: Whether the schedule item is completed
+          example: false
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+          example: "2024-01-15T10:30:00"
+
+    ScheduleCreate:
+      type: object
+      required:
+        - task_id
+        - scheduled_start
+        - scheduled_end
+      properties:
+        task_id:
+          type: integer
+          description: Task ID to schedule
+          example: 1
+        scheduled_start:
+          type: string
+          format: date-time
+          description: Scheduled start time
+          example: "2024-01-16T09:00:00"
+        scheduled_end:
+          type: string
+          format: date-time
+          description: Scheduled end time
+          example: "2024-01-16T11:00:00"
+
+    ScheduleUpdate:
+      type: object
+      properties:
+        scheduled_start:
+          type: string
+          format: date-time
+          description: New scheduled start time
+          example: "2024-01-16T10:00:00"
+        scheduled_end:
+          type: string
+          format: date-time
+          description: New scheduled end time
+          example: "2024-01-16T12:00:00"
+        is_completed:
+          type: boolean
+          description: Mark as completed
+          example: true
+
+    EmailRequest:
+      type: object
+      required:
+        - subject
+        - body
+        - to
+      properties:
+        subject:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Email subject
+          example: "Meeting Reminder"
+        body:
+          type: string
+          minLength: 1
+          description: Email body
+          example: "This is a reminder about our upcoming meeting."
+        to:
+          type: string
+          pattern: '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+          description: Recipient email address
+          example: "client@example.com"
+
+    ReminderRequest:
+      type: object
+      required:
+        - task_id
+      properties:
+        task_id:
+          type: integer
+          description: Task ID to send reminder for
+          example: 1
+        message:
+          type: string
+          description: Custom reminder message
+          example: "Don't forget about the presentation!"
+
+    ProductivityAnalysis:
+      type: object
+      required:
+        - time_period
+        - insights
+        - recommendations
+      properties:
+        time_period:
+          type: string
+          enum: [day, week, month]
+          description: Time period analyzed
+          example: "week"
+        insights:
+          type: string
+          description: AI-generated insights about productivity
+          example: "You completed 80% of your high-priority tasks this week, which is above average."
+        recommendations:
+          type: array
+          items:
+            type: string
+          description: AI-generated recommendations for improvement
+          example:
+            - "Consider breaking down large tasks into smaller subtasks"
+            - "Schedule focused work periods during your most productive hours"
+            - "Review and update task priorities weekly"
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for authentication (if implemented)
+
+security:
+  - ApiKeyAuth: [] 

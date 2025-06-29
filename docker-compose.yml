@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  ai-assistant-api:
+    build: .
+    container_name: ai-assistant-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_CREDENTIALS_PATH=/app/credentials/google_credentials.json
+      - GOOGLE_SHEET_ID=${GOOGLE_SHEET_ID}
+      - GOOGLE_CALENDAR_ID=${GOOGLE_CALENDAR_ID:-primary}
+      - GMAIL_OAUTH_CREDENTIALS_PATH=/app/credentials/gmail_oauth_credentials.json
+      - GMAIL_TOKEN_PATH=/app/credentials/gmail_token.pickle
+      - DATABASE_URL=sqlite:///./assistant.db
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - DEFAULT_EMAIL=${DEFAULT_EMAIL}
+      - SECRET_KEY=${SECRET_KEY}
+    volumes:
+      - ./credentials:/app/credentials:ro
+      - ai_assistant_data:/app
+    networks:
+      - ai-assistant-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  nginx:
+    image: nginx:alpine
+    container_name: ai-assistant-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/ai-assistant.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - ai-assistant-api
+    networks:
+      - ai-assistant-network
+
+volumes:
+  ai_assistant_data:
+
+networks:
+  ai-assistant-network:
+    driver: bridge 

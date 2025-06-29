@@ -21,7 +21,6 @@ services:
       - SECRET_KEY=${SECRET_KEY}
     volumes:
       - ./credentials:/app/credentials:ro
-      - ai_assistant_data:/app
     networks:
       - ai-assistant-network
     healthcheck:

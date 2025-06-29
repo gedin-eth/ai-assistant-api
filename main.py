@@ -226,12 +226,16 @@ async def delete_task(task_id: int, services=Depends(get_services)):
 # AI-Powered Task Management
 
 @app.post("/tasks/ai-process")
-async def process_task_with_ai(description: str, services=Depends(get_services)):
+async def process_task_with_ai(request: dict, services=Depends(get_services)):
     """Process natural language task description with AI"""
     try:
         _, openai_service, _, _ = services
         if not openai_service:
             raise HTTPException(status_code=503, detail="OpenAI service not configured")
+        
+        description = request.get("description")
+        if not description:
+            raise HTTPException(status_code=400, detail="Description is required")
         
         processed_task = openai_service.process_task_input({"description": description})
         return processed_task
@@ -239,12 +243,16 @@ async def process_task_with_ai(description: str, services=Depends(get_services))
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/tasks/ai-create")
-async def create_task_with_ai(description: str, services=Depends(get_services)):
+async def create_task_with_ai(request: dict, services=Depends(get_services)):
     """Create a task from natural language description using AI"""
     try:
         google_service, openai_service, task_service, _ = services
         if not openai_service:
             raise HTTPException(status_code=503, detail="OpenAI service not configured")
+        
+        description = request.get("description")
+        if not description:
+            raise HTTPException(status_code=400, detail="Description is required")
         
         # Process with AI
         processed_task = openai_service.process_task_input({"description": description})
@@ -333,8 +341,8 @@ async def generate_schedule(background_tasks: BackgroundTasks, services=Depends(
             )
         )
         
-        # Limit to top 10 tasks to prevent message size issues
-        filtered_tasks = filtered_tasks[:10]
+        # Limit to top 5 tasks to prevent message size issues (reduced from 10)
+        filtered_tasks = filtered_tasks[:5]
         
         if not filtered_tasks:
             return {"message": "No suitable tasks to schedule"}
@@ -344,8 +352,8 @@ async def generate_schedule(background_tasks: BackgroundTasks, services=Depends(
         if google_service:
             try:
                 calendar_events = google_service.get_calendar_events()
-                # Limit calendar events to prevent message size issues
-                calendar_events = calendar_events[:20] if calendar_events else []
+                # Limit calendar events to prevent message size issues (reduced from 20)
+                calendar_events = calendar_events[:10] if calendar_events else []
             except Exception as e:
                 print(f"Warning: Could not fetch calendar events: {str(e)}")
         

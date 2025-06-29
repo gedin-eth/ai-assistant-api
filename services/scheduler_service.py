@@ -11,9 +11,9 @@ import json
 import os
 
 class SchedulerService:
-    def __init__(self):
+    def __init__(self, google_service=None):
         self.db = SessionLocal()
-        self.google_service = GoogleService()
+        self.google_service = google_service
         self.running = False
 
     async def run_scheduler(self):
@@ -66,21 +66,27 @@ class SchedulerService:
                     },
                 }
                 
-                # Create event in Google Calendar
-                calendar_event = self.google_service.create_calendar_event(event_data)
+                # Create event in Google Calendar if available
+                calendar_event_id = None
+                if self.google_service:
+                    try:
+                        calendar_event = self.google_service.create_calendar_event(event_data)
+                        calendar_event_id = calendar_event.get('id')
+                    except Exception as e:
+                        print(f"Warning: Could not create calendar event: {str(e)}")
                 
                 # Save to database
                 schedule_entry = Schedule(
                     task_id=task_id,
                     scheduled_start=start_dt,
                     scheduled_end=end_dt,
-                    calendar_event_id=calendar_event.get('id')
+                    calendar_event_id=calendar_event_id
                 )
                 
                 self.db.add(schedule_entry)
                 created_events.append({
                     'task_id': task_id,
-                    'calendar_event_id': calendar_event.get('id'),
+                    'calendar_event_id': calendar_event_id,
                     'start_time': start_dt.isoformat(),
                     'end_time': end_dt.isoformat()
                 })
@@ -227,6 +233,10 @@ class SchedulerService:
     def _send_daily_summary(self, schedules: List[Schedule]):
         """Send daily schedule summary"""
         try:
+            if not self.google_service:
+                print("Google service not available - skipping daily summary email")
+                return
+                
             summary = "Today's Schedule:\n\n"
             for schedule in schedules:
                 task = self.db.query(Task).filter(Task.id == schedule.task_id).first()
@@ -247,6 +257,10 @@ class SchedulerService:
             if not completed_schedules:
                 return
             
+            if not self.google_service:
+                print("Google service not available - skipping evening review email")
+                return
+                
             review = "Evening Review - Completed Tasks:\n\n"
             for schedule in completed_schedules:
                 task = self.db.query(Task).filter(Task.id == schedule.task_id).first()
@@ -264,6 +278,10 @@ class SchedulerService:
     def _send_overdue_notification(self, overdue_tasks: List[Task]):
         """Send overdue task notification"""
         try:
+            if not self.google_service:
+                print("Google service not available - skipping overdue notification email")
+                return
+                
             notification = "Overdue Tasks Alert:\n\n"
             for task in overdue_tasks:
                 notification += f"⚠️ {task.title} (Due: {task.due_date.strftime('%Y-%m-%d %H:%M')})\n"
@@ -279,7 +297,7 @@ class SchedulerService:
     def _update_calendar_event(self, schedule: Schedule):
         """Update calendar event in Google Calendar"""
         try:
-            if not schedule.calendar_event_id:
+            if not schedule.calendar_event_id or not self.google_service:
                 return
             
             event_data = {
@@ -304,6 +322,9 @@ class SchedulerService:
     def _delete_calendar_event(self, event_id: str):
         """Delete calendar event from Google Calendar"""
         try:
+            if not self.google_service:
+                return
+                
             self.google_service.calendar_service.events().delete(
                 calendarId='primary',
                 eventId=event_id

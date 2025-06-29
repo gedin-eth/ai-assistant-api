@@ -20,6 +20,11 @@ class GoogleService:
         ]
         self.credentials_path = os.getenv('GOOGLE_CREDENTIALS_PATH', 'credentials.json')
         print(f"Using credentials from: {self.credentials_path}")  # Debug print
+        
+        # Check if credentials file exists before trying to authenticate
+        if not os.path.exists(self.credentials_path):
+            raise FileNotFoundError(f"Credentials file not found at {self.credentials_path}")
+        
         self.creds = self._authenticate()
         self.sheets_service = build('sheets', 'v4', credentials=self.creds)
         self.calendar_service = build('calendar', 'v3', credentials=self.creds)
@@ -27,13 +32,9 @@ class GoogleService:
 
     def _authenticate(self):
         """Handle Google Service Account authentication"""
-        credentials_path = self.credentials_path
-        if not os.path.exists(credentials_path):
-            raise FileNotFoundError(f"Credentials file not found at {credentials_path}")
-        
         print(f"🔐 Authenticating with service account...")
         creds = service_account.Credentials.from_service_account_file(
-            credentials_path, scopes=self.SCOPES
+            self.credentials_path, scopes=self.SCOPES
         )
         
         # Print service account email for debugging

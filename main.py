@@ -48,8 +48,8 @@ gmail_service = None
 
 def get_services():
     """Dependency to ensure services are available"""
-    if not all([google_service, openai_service, task_service, scheduler_service]):
-        raise HTTPException(status_code=503, detail="Services not initialized")
+    if not all([task_service, scheduler_service]):
+        raise HTTPException(status_code=503, detail="Core services not initialized")
     return google_service, openai_service, task_service, scheduler_service
 
 def get_gmail_service():
@@ -64,10 +64,24 @@ async def startup_event():
     global google_service, openai_service, task_service, scheduler_service, gmail_service
     
     # Initialize services after environment variables are loaded
-    google_service = GoogleService()
-    openai_service = OpenAIService()
+    # Initialize Google Service (optional - won't crash if not configured)
+    try:
+        google_service = GoogleService()
+        print("✅ Google service initialized")
+    except Exception as e:
+        print(f"⚠️  Google service not initialized: {str(e)}")
+        google_service = None
+    
+    # Initialize OpenAI Service (optional - won't crash if not configured)
+    try:
+        openai_service = OpenAIService()
+        print("✅ OpenAI service initialized")
+    except Exception as e:
+        print(f"⚠️  OpenAI service not initialized: {str(e)}")
+        openai_service = None
+    
     task_service = TaskService()
-    scheduler_service = SchedulerService()
+    scheduler_service = SchedulerService(google_service)
     
     # Initialize Gmail OAuth service (optional - won't crash if not configured)
     try:
@@ -206,6 +220,9 @@ async def process_task_with_ai(description: str, services=Depends(get_services))
     """Process natural language task description with AI"""
     try:
         _, openai_service, _, _ = services
+        if not openai_service:
+            raise HTTPException(status_code=503, detail="OpenAI service not configured")
+        
         processed_task = openai_service.process_task_input({"description": description})
         return processed_task
     except Exception as e:
@@ -216,16 +233,25 @@ async def create_task_with_ai(description: str, services=Depends(get_services)):
     """Create a task from natural language description using AI"""
     try:
         google_service, openai_service, task_service, _ = services
+        if not openai_service:
+            raise HTTPException(status_code=503, detail="OpenAI service not configured")
+        
         # Process with AI
         processed_task = openai_service.process_task_input({"description": description})
         
         # Create task
         task = task_service.create_task(processed_task)
         
-        # Add to Google Sheet
-        google_service.add_task_to_sheet(task)
-        
-        return {"task": task, "message": "Task created successfully with AI processing"}
+        # Add to Google Sheet if available
+        if google_service:
+            try:
+                google_service.add_task_to_sheet(task)
+                return {"task": task, "message": "Task created successfully with AI processing and Google Sheets sync"}
+            except Exception as e:
+                print(f"Warning: Could not sync to Google Sheets: {str(e)}")
+                return {"task": task, "message": "Task created successfully with AI processing (Google Sheets sync failed)"}
+        else:
+            return {"task": task, "message": "Task created successfully with AI processing (Google Sheets not configured)"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -234,6 +260,9 @@ async def get_task_improvements(task_id: int, services=Depends(get_services)):
     """Get AI suggestions for task improvements"""
     try:
         _, openai_service, task_service, _ = services
+        if not openai_service:
+            raise HTTPException(status_code=503, detail="OpenAI service not configured")
+        
         task = task_service.get_task(task_id)
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
@@ -255,14 +284,22 @@ async def generate_schedule(background_tasks: BackgroundTasks, services=Depends(
     """Generate optimal schedule using AI"""
     try:
         google_service, openai_service, task_service, scheduler_service = services
+        if not openai_service:
+            raise HTTPException(status_code=503, detail="OpenAI service not configured")
+        
         # Get pending tasks
         pending_tasks = task_service.get_pending_tasks()
         
         if not pending_tasks:
             return {"message": "No pending tasks to schedule"}
         
-        # Get calendar availability
-        calendar_events = google_service.get_calendar_events()
+        # Get calendar availability if Google service is available
+        calendar_events = []
+        if google_service:
+            try:
+                calendar_events = google_service.get_calendar_events()
+            except Exception as e:
+                print(f"Warning: Could not fetch calendar events: {str(e)}")
         
         # Generate schedule with AI
         schedule = openai_service.generate_schedule(
@@ -271,11 +308,12 @@ async def generate_schedule(background_tasks: BackgroundTasks, services=Depends(
             current_time=datetime.now()
         )
         
-        # Create calendar events in background
-        background_tasks.add_task(
-            scheduler_service.create_calendar_events, 
-            schedule
-        )
+        # Create calendar events in background if Google service is available
+        if google_service:
+            background_tasks.add_task(
+                scheduler_service.create_calendar_events, 
+                schedule
+            )
         
         return {"schedule": schedule, "message": "Schedule generated successfully"}
     except Exception as e:
@@ -308,27 +346,33 @@ async def create_schedule(schedule_data: ScheduleCreate, services=Depends(get_se
                 content={"message": "Schedule conflict detected", "conflicts": conflicts}
             )
         
-        # Create calendar event
-        event_data = {
-            'summary': f'Task {schedule_data.task_id}',
-            'start': {
-                'dateTime': schedule_data.scheduled_start.isoformat(),
-                'timeZone': 'UTC',
-            },
-            'end': {
-                'dateTime': schedule_data.scheduled_end.isoformat(),
-                'timeZone': 'UTC',
-            },
-        }
-        
-        calendar_event = google_service.create_calendar_event(event_data)
+        # Create calendar event if Google service is available
+        calendar_event_id = None
+        if google_service:
+            try:
+                event_data = {
+                    'summary': f'Task {schedule_data.task_id}',
+                    'start': {
+                        'dateTime': schedule_data.scheduled_start.isoformat(),
+                        'timeZone': 'UTC',
+                    },
+                    'end': {
+                        'dateTime': schedule_data.scheduled_end.isoformat(),
+                        'timeZone': 'UTC',
+                    },
+                }
+                
+                calendar_event = google_service.create_calendar_event(event_data)
+                calendar_event_id = calendar_event.get('id')
+            except Exception as e:
+                print(f"Warning: Could not create calendar event: {str(e)}")
         
         # Save to database
         schedule_entry = Schedule(
             task_id=schedule_data.task_id,
             scheduled_start=schedule_data.scheduled_start,
             scheduled_end=schedule_data.scheduled_end,
-            calendar_event_id=calendar_event.get('id')
+            calendar_event_id=calendar_event_id
         )
         
         task_service.db.add(schedule_entry)
@@ -391,6 +435,9 @@ async def sync_tasks_from_sheet(services=Depends(get_services)):
     """Sync tasks from Google Sheet to database"""
     try:
         google_service, _, task_service, _ = services
+        if not google_service:
+            raise HTTPException(status_code=503, detail="Google Sheets service not configured")
+        
         sheet_data = google_service.read_sheet()
         synced_tasks = task_service.sync_tasks(sheet_data)
         return {"message": f"Synced {len(synced_tasks)} tasks from Google Sheet"}
@@ -402,6 +449,9 @@ async def get_calendar_events(days_ahead: int = 7, services=Depends(get_services
     """Get calendar events"""
     try:
         google_service, _, _, _ = services
+        if not google_service:
+            raise HTTPException(status_code=503, detail="Google Calendar service not configured")
+        
         events = google_service.get_calendar_events(days_ahead)
         return {"events": events}
     except Exception as e:
@@ -427,6 +477,9 @@ async def send_reminder(reminder_request: ReminderRequest, services=Depends(get_
     """Send a reminder email for a task using Gmail OAuth2"""
     try:
         _, openai_service, task_service, _ = services
+        if not openai_service:
+            raise HTTPException(status_code=503, detail="OpenAI service not configured")
+        
         task = task_service.get_task(reminder_request.task_id)
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
@@ -470,6 +523,9 @@ async def analyze_productivity(time_period: str = "week", services=Depends(get_s
     """Analyze productivity patterns"""
     try:
         _, openai_service, task_service, _ = services
+        if not openai_service:
+            raise HTTPException(status_code=503, detail="OpenAI service not configured")
+        
         # Get completed tasks for the period
         if time_period == "day":
             days = 1

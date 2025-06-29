@@ -9,6 +9,9 @@ class TaskInput(BaseModel):
     due_date: Optional[datetime] = None
     estimated_duration: Optional[int] = Field(None, gt=0)
 
+class AIRequest(BaseModel):
+    description: str = Field(..., min_length=1, max_length=1000)
+
 class TaskResponse(BaseModel):
     id: int
     title: str

@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import asyncio
 import os
 from dotenv import load_dotenv
+from contextlib import asynccontextmanager
 
 from services.google_service import GoogleService
 from services.openai_service import OpenAIService
@@ -17,7 +18,7 @@ from database.database import engine, get_db
 from models import (
     TaskInput, TaskResponse, TaskUpdate, ScheduleResponse, 
     ScheduleCreate, ScheduleUpdate, TaskStatistics, EmailRequest,
-    ReminderRequest, ProductivityAnalysis
+    ReminderRequest, ProductivityAnalysis, AIRequest
 )
 
 # Load environment variables
@@ -226,36 +227,28 @@ async def delete_task(task_id: int, services=Depends(get_services)):
 # AI-Powered Task Management
 
 @app.post("/tasks/ai-process")
-async def process_task_with_ai(request: dict, services=Depends(get_services)):
+async def process_task_with_ai(request: AIRequest, services=Depends(get_services)):
     """Process natural language task description with AI"""
     try:
         _, openai_service, _, _ = services
         if not openai_service:
             raise HTTPException(status_code=503, detail="OpenAI service not configured")
         
-        description = request.get("description")
-        if not description:
-            raise HTTPException(status_code=400, detail="Description is required")
-        
-        processed_task = openai_service.process_task_input({"description": description})
+        processed_task = openai_service.process_task_input({"description": request.description})
         return processed_task
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/tasks/ai-create")
-async def create_task_with_ai(request: dict, services=Depends(get_services)):
+async def create_task_with_ai(request: AIRequest, services=Depends(get_services)):
     """Create a task from natural language description using AI"""
     try:
         google_service, openai_service, task_service, _ = services
         if not openai_service:
             raise HTTPException(status_code=503, detail="OpenAI service not configured")
         
-        description = request.get("description")
-        if not description:
-            raise HTTPException(status_code=400, detail="Description is required")
-        
         # Process with AI
-        processed_task = openai_service.process_task_input({"description": description})
+        processed_task = openai_service.process_task_input({"description": request.description})
         
         # Create task
         task = task_service.create_task(processed_task)

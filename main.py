@@ -27,7 +27,17 @@ load_dotenv()
 app = FastAPI(
     title="AI Personal Assistant API",
     description="An intelligent personal assistant that manages tasks, schedules, and productivity using AI",
-    version="1.0.0"
+    version="1.0.0",
+    servers=[
+        {
+            "url": "https://421b-2a02-4780-10-ec0d-00-1.ngrok-free.app",
+            "description": "Production server via ngrok tunnel"
+        },
+        {
+            "url": "http://localhost:8000",
+            "description": "Development server"
+        }
+    ]
 )
 
 # Add CORS middleware for web interface

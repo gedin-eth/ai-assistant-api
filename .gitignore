@@ -2,6 +2,9 @@
 .env
 .env.local
 .env.production
+.env
+.env.*
+credentials/
 
 # Google credentials
 *.json
@@ -74,4 +77,6 @@ ssl/
 
 # Temporary files
 *.tmp
-*.temp 
+*.temp .env
+.env.*
+credentials/

@@ -19,16 +19,16 @@ info:
     - Gmail OAuth2 for email functionality
     
     ## Base URL
-    - Production: `http://82.180.161.161:8000`
+    - Production: `https://421b-2a02-4780-10-ec0d-00-1.ngrok-free.app`
     - Development: `http://localhost:8000`
   version: 1.0.0
   contact:
     name: AI Assistant API Support
-    url: http://82.180.161.161:8000/docs
+    url: https://421b-2a02-4780-10-ec0d-00-1.ngrok-free.app/docs
 
 servers:
-  - url: http://82.180.161.161:8000
-    description: Production server
+  - url: https://421b-2a02-4780-10-ec0d-00-1.ngrok-free.app
+    description: Production server via ngrok tunnel
   - url: http://localhost:8000
     description: Development server
 
